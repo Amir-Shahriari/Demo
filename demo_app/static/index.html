@@ -1,0 +1,1561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GNN-DQN Warm-Start Pathfinding — ICDM 2026</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:      #0d1117;
+    --bg2:     #161b22;
+    --bg3:     #1c2330;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --red:     #f85149;
+    --orange:  #d29922;
+    --blue:    #58a6ff;
+    --warm:    #3fb950;
+    --cold:    #e07940;
+    --dijk:    #58a6ff;
+    --accent:  #1f6feb;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 13px;
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+
+  /* ── Header ──────────────────────────────────────────────────── */
+  header {
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  header h1 { font-size: 15px; font-weight: 600; flex: 1; }
+  header .subtitle { color: var(--muted); font-size: 11px; }
+
+  /* ── Tabs ─────────────────────────────────────────────────────── */
+  .tab-bar { display: flex; gap: 4px; }
+  .tab-btn {
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--muted);
+    cursor: pointer;
+    padding: 5px 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.15s;
+  }
+  .tab-btn:hover { color: var(--text); border-color: var(--border); }
+  .tab-btn.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: transparent;
+  }
+
+  /* ── Layout ───────────────────────────────────────────────────── */
+  main { padding: 16px 20px; max-width: 1400px; margin: 0 auto; }
+  .tab-pane { display: none; }
+  .tab-pane.active { display: block; }
+
+  /* ── Control bar ──────────────────────────────────────────────── */
+  .control-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+  }
+  .control-bar label { color: var(--muted); font-size: 12px; white-space: nowrap; }
+
+  select, input[type=range] {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 12px;
+  }
+  select { cursor: pointer; min-width: 160px; }
+  select:focus { outline: 1px solid var(--accent); }
+
+  /* ── Buttons ──────────────────────────────────────────────────── */
+  .btn {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 5px 14px;
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.15s;
+  }
+  .btn:hover { background: var(--bg3); border-color: var(--muted); }
+  .btn.primary { background: var(--accent); border-color: transparent; color: #fff; }
+  .btn.primary:hover { background: #1a5bb8; }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  /* ── Canvases ─────────────────────────────────────────────────── */
+  .canvas-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .canvas-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .canvas-card .card-title {
+    padding: 6px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .canvas-card canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .badge {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 9px;
+    text-transform: uppercase;
+  }
+  .badge.reached  { background: rgba(63,185,80,.2); color: var(--green); }
+  .badge.failed   { background: rgba(248,81,73,.2); color: var(--red); }
+  .badge.dijkstra { background: rgba(88,166,255,.15); color: var(--blue); }
+
+  /* ── Slider row ───────────────────────────────────────────────── */
+  .slider-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+  .slider-row input[type=range] { flex: 1; min-width: 160px; }
+  .step-label { color: var(--muted); font-size: 12px; white-space: nowrap; min-width: 90px; }
+
+  /* ── Metrics panel ────────────────────────────────────────────── */
+  .metrics-panel {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 10px;
+  }
+  .metric-group h4 {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 6px;
+  }
+  .metric-group h4.warm  { color: var(--warm); }
+  .metric-group h4.cold  { color: var(--cold); }
+  .metric-group h4.dijk  { color: var(--dijk); }
+  .metric-row { display: flex; gap: 8px; margin-bottom: 3px; flex-wrap: wrap; }
+  .metric-item { font-size: 12px; }
+  .metric-label { color: var(--muted); }
+  .metric-val   { font-weight: 600; }
+  .metric-val.ok  { color: var(--green); }
+  .metric-val.bad { color: var(--red); }
+
+  /* ── Batch table ──────────────────────────────────────────────── */
+  .section-title {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+  .table-wrap {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: auto;
+    max-height: 300px;
+    margin-bottom: 20px;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  thead th {
+    position: sticky; top: 0;
+    background: var(--bg3);
+    border-bottom: 1px solid var(--border);
+    padding: 6px 10px;
+    text-align: left;
+    color: var(--muted);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover td { background: var(--bg3); }
+  tbody tr.selected td { background: rgba(31,111,235,.15); }
+  tbody td {
+    padding: 5px 10px;
+    border-bottom: 1px solid rgba(48,54,61,.5);
+    white-space: nowrap;
+  }
+  .bool-yes { color: var(--green); font-weight: 700; }
+  .bool-no  { color: var(--red);   font-weight: 700; }
+
+  /* ── Error / Info ─────────────────────────────────────────────── */
+  .error-msg {
+    background: rgba(248,81,73,.12);
+    border: 1px solid rgba(248,81,73,.4);
+    color: var(--red);
+    padding: 8px 12px;
+    border-radius: 6px;
+    margin-bottom: 12px;
+    font-size: 12px;
+    display: none;
+  }
+  .info-msg {
+    background: rgba(31,111,235,.12);
+    border: 1px solid rgba(31,111,235,.3);
+    color: var(--blue);
+    padding: 8px 12px;
+    border-radius: 6px;
+    margin-bottom: 12px;
+    font-size: 12px;
+  }
+  .warn-msg {
+    background: rgba(210,153,34,.12);
+    border: 1px solid rgba(210,153,34,.4);
+    color: var(--orange);
+    padding: 8px 12px;
+    border-radius: 6px;
+    margin-bottom: 12px;
+    font-size: 12px;
+    display: none;
+  }
+  .spinner {
+    display: inline-block;
+    width: 12px; height: 12px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    vertical-align: middle;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* responsive */
+  @media (max-width: 900px) {
+    .canvas-row { grid-template-columns: 1fr; }
+    .metrics-panel { grid-template-columns: 1fr; }
+  }
+
+  /* ── Sandbox tab ──────────────────────────────────────────────── */
+  .sb-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+  }
+  .sb-toolbar label { color: var(--muted); font-size: 12px; }
+  .sb-mode-btn {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    border-radius: 6px;
+    padding: 4px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .sb-mode-btn:hover { color: var(--text); border-color: var(--muted); }
+  .sb-mode-btn.active { background: var(--accent); color: #fff; border-color: transparent; }
+  .sb-canvas-wrap {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    display: inline-block;
+    overflow: hidden;
+    cursor: crosshair;
+    margin-bottom: 12px;
+  }
+  .sb-hint {
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 10px;
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+  .sb-hint span { white-space: nowrap; }
+  .sb-hint .set { color: var(--green); }
+  .sb-hint .notset { color: var(--red); }
+  .sb-results {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-top: 14px;
+    font-size: 12px;
+    display: none;
+  }
+  .sb-results .sr-title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+  .sb-results .sr-row { margin-bottom: 4px; }
+  .sb-results .sr-warm { color: var(--warm); font-weight: 600; }
+  .sb-results .sr-cold { color: var(--cold); font-weight: 600; }
+  .sb-results .sr-dijk { color: var(--dijk); font-weight: 600; }
+  .sb-results .sr-inf  { color: var(--muted); }
+  .btn.race-btn {
+    background: var(--accent);
+    border-color: transparent;
+    color: #fff;
+    font-size: 13px;
+    padding: 6px 20px;
+  }
+  .btn.race-btn:hover { background: #1a5bb8; }
+  .btn.race-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>GNN-DQN Warm-Start Pathfinding</h1>
+  <span class="subtitle">ICDM 2026 Demo</span>
+  <div class="tab-bar">
+    <button class="tab-btn active" data-tab="reach" onclick="switchTab('reach')">Reach</button>
+    <button class="tab-btn" data-tab="sandbox" onclick="switchTab('sandbox')">Sandbox</button>
+  </div>
+</header>
+
+<main>
+
+  <!-- ═══════════════════════  REACH TAB  ═══════════════════════ -->
+  <div class="tab-pane active" id="tab-reach">
+
+    <div class="control-bar">
+      <label for="scenSelect">Scenario:</label>
+      <select id="scenSelect" onchange="onScenarioChange()">
+        <option value="">Loading…</option>
+      </select>
+      <label for="perturbSelect" style="margin-left:6px;">Perturbation:</label>
+      <select id="perturbSelect" onchange="onPerturbChange()" style="min-width:190px;">
+        <option value="1.0">Training level (paper)</option>
+        <option value="0.5">Low  (0.5× edge-fail prob)</option>
+        <option value="2.0">High (2×  edge-fail prob)</option>
+      </select>
+      <label for="oracleSelect" id="oracleSelectLabel" style="margin-left:6px;display:none;">Oracle source:</label>
+      <select id="oracleSelect" onchange="onOracleChange()" style="min-width:190px;display:none;">
+        <option value="full_pool">Full pool (paper baseline)</option>
+        <option value="classical_only">Classical only</option>
+        <option value="quantum_only">Quantum only (QAOA)</option>
+      </select>
+      <button class="btn primary" id="btnRun" onclick="runReach()" disabled>Load</button>
+      <button class="btn" id="btnPlay" onclick="togglePlay()" disabled>▶ Play</button>
+      <button class="btn" id="btnReset" onclick="resetAnim()" disabled>◀ Reset</button>
+      <span id="loadingIndicator" style="display:none;color:var(--muted);font-size:12px;">
+        <span class="spinner"></span> Loading…
+      </span>
+    </div>
+
+    <div id="reachOodNote" class="warn-msg">
+      ⚠ Non-training perturbation — live rollout on graph rebuilt with modified edge-fail probability.
+      Paper numbers are valid only at the "Training level" setting.
+    </div>
+
+    <div class="error-msg" id="reachError"></div>
+
+    <div class="canvas-row">
+      <div class="canvas-card">
+        <div class="card-title" style="color:var(--warm);">
+          <span class="badge reached" id="warmBadge">WARM</span>
+          <span id="warmCardLabel">Warm Agent</span>
+        </div>
+        <canvas id="cvWarm" width="480" height="480"></canvas>
+      </div>
+      <div class="canvas-card">
+        <div class="card-title" style="color:var(--cold);">
+          <span class="badge failed" id="coldBadge">COLD</span>
+          Cold Agent
+        </div>
+        <canvas id="cvCold" width="480" height="480"></canvas>
+      </div>
+      <div class="canvas-card">
+        <div class="card-title" style="color:var(--dijk);">
+          <span class="badge dijkstra">OPTIMAL</span>
+          Dijkstra
+        </div>
+        <canvas id="cvDijk" width="480" height="480"></canvas>
+      </div>
+    </div>
+
+    <div class="slider-row">
+      <label style="color:var(--muted);font-size:12px;">Step:</label>
+      <input type="range" id="stepSlider" min="0" max="0" value="0" oninput="onSlider()" disabled>
+      <span class="step-label" id="stepLabel">0 / 0</span>
+    </div>
+
+    <div class="metrics-panel" id="metricsPanel">
+      <div class="metric-group">
+        <h4 class="warm" id="warmMetricsLabel">Warm Agent</h4>
+        <div class="metric-row" id="warmMetrics"><span class="metric-label">—</span></div>
+      </div>
+      <div class="metric-group">
+        <h4 class="cold">Cold Agent</h4>
+        <div class="metric-row" id="coldMetrics"><span class="metric-label">—</span></div>
+      </div>
+      <div class="metric-group">
+        <h4 class="dijk">Dijkstra</h4>
+        <div class="metric-row" id="dijkMetrics"><span class="metric-label">—</span></div>
+      </div>
+    </div>
+
+    <div class="section-title">All Scenarios</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Cell ID</th>
+            <th>Scale</th>
+            <th>Warm Reached</th>
+            <th>Cold Reached</th>
+            <th>Warm Ratio</th>
+          </tr>
+        </thead>
+        <tbody id="cellsTableBody">
+          <tr><td colspan="7" style="color:var(--muted);text-align:center;">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div><!-- /tab-reach -->
+
+
+  <!-- ═══════════════════════  SANDBOX TAB  ═══════════════════════ -->
+  <div class="tab-pane" id="tab-sandbox">
+
+    <!-- Scenario selector row -->
+    <div class="control-bar" style="margin-bottom:10px;">
+      <label for="sbScenSelect">Agent pair:</label>
+      <select id="sbScenSelect" onchange="onSbScenChange()" style="min-width:140px;">
+        <option value="">Loading…</option>
+      </select>
+      <button class="btn" id="btnSbTrainingPair" onclick="sbUseTrainingPair()">Use Training Pair</button>
+      <span style="color:var(--muted);font-size:11px;">
+        ← default shows the evaluated scenario; move src/dst to test OOD generalization
+      </span>
+    </div>
+
+    <div class="sb-toolbar">
+      <label>Mode:</label>
+      <button class="sb-mode-btn" id="sbModeSource" onclick="setSbMode('source')">Set Source</button>
+      <button class="sb-mode-btn" id="sbModeDest"   onclick="setSbMode('dest')">Set Dest</button>
+      <button class="sb-mode-btn active" id="sbModeBlock" onclick="setSbMode('block')">Block / Unblock</button>
+      <button class="btn" onclick="sbClearObstacles()">Clear Obstacles</button>
+      <button class="btn" onclick="sbResetAll()">Reset All</button>
+    </div>
+
+    <div id="sbOodNote" class="warn-msg">
+      ⚠ Custom src/dst — testing out-of-distribution generalization.
+      These agents were trained on one fixed route; warm may not reliably reach on arbitrary pairs.
+      Cost ratio is always real regardless of outcome.
+    </div>
+
+    <div id="sbError" class="error-msg" style="display:none"></div>
+
+    <div class="sb-canvas-wrap">
+      <canvas id="cvSandbox" width="580" height="580"></canvas>
+    </div>
+
+    <div class="sb-hint" id="sbHint">
+      <span id="sbHintSrc" class="notset">source: not set</span>
+      <span id="sbHintDst" class="notset">dest: not set</span>
+      <span id="sbHintObs">obstacles: 0</span>
+    </div>
+
+    <div>
+      <button class="btn race-btn" id="btnRace" onclick="runSandboxRace()" disabled>Race! ▶</button>
+      <span id="sbRaceLoading" style="display:none;margin-left:10px;color:var(--muted);font-size:12px;">
+        <span class="spinner"></span> Running…
+      </span>
+    </div>
+
+    <div class="sb-results" id="sbResults">
+      <div class="sr-title">Race Results</div>
+      <div class="sr-row" id="srWarmRow">—</div>
+      <div class="sr-row" id="srColdRow">—</div>
+      <div class="sr-row" id="srDijkRow">—</div>
+      <div class="sr-row" id="srLatRow" style="margin-top:6px;color:var(--muted);">—</div>
+    </div>
+
+  </div><!-- /tab-sandbox -->
+
+</main>
+
+<script>
+/* ================================================================
+   DPR-aware canvas initialisation
+   ================================================================ */
+function initCanvas(cv, logicalW, logicalH) {
+  const dpr = window.devicePixelRatio || 1;
+  cv.width  = logicalW * dpr;
+  cv.height = logicalH * dpr;
+  cv.style.width  = logicalW + 'px';
+  cv.style.height = logicalH + 'px';
+  cv._logW = logicalW;
+  cv._logH = logicalH;
+  const ctx = cv.getContext('2d');
+  ctx.scale(dpr, dpr);
+  return ctx;
+}
+
+function initAllCanvases() {
+  initCanvas(document.getElementById('cvWarm'),    480, 480);
+  initCanvas(document.getElementById('cvCold'),    480, 480);
+  initCanvas(document.getElementById('cvDijk'),    480, 480);
+  initCanvas(document.getElementById('cvSandbox'), 580, 580);
+}
+
+/* ================================================================
+   State
+   ================================================================ */
+let _cells     = [];          // /cells payload
+let _reach     = null;        // /reach payload for current scenario
+let _animStep  = 0;
+let _maxStep   = 0;
+let _playTimer = null;
+let _isPlaying = false;
+
+/* Transform: map node coords → canvas px */
+let _transform = null;  // { scaleX, scaleY, offX, offY, radius }
+
+/* ================================================================
+   Tab switching
+   ================================================================ */
+function switchTab(name) {
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  const btn = document.querySelector(`.tab-btn[data-tab="${name}"]`);
+  if (btn) btn.classList.add('active');
+  if (name === 'sandbox') activateSandboxTab();
+}
+
+/* ================================================================
+   On load
+   ================================================================ */
+window.addEventListener('DOMContentLoaded', async () => {
+  initAllCanvases();
+  await loadCells();
+});
+
+async function loadCells() {
+  try {
+    const res = await fetch('/cells');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    _cells = await res.json();
+    populateSelector();
+    populateCellsTable();
+    // Auto-select 25x25_s1 if present
+    const sel = document.getElementById('scenSelect');
+    const prefer = _cells.findIndex(c => c.cell_id === '25x25_s1');
+    if (prefer >= 0) sel.selectedIndex = prefer;
+    document.getElementById('btnRun').disabled = false;
+    _updateOracleVisibility();
+  } catch(e) {
+    showError('reachError', 'Failed to load cells: ' + e.message);
+  }
+}
+
+/* ================================================================
+   Scenario selector
+   ================================================================ */
+function populateSelector() {
+  const sel = document.getElementById('scenSelect');
+  sel.innerHTML = '';
+  _cells.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c.cell_id;
+    const wr = c.warm_reached ? '✓W' : '✗W';
+    const cr = c.cold_reached ? '✓C' : '✗C';
+    const ratio = c.warm_ratio != null ? c.warm_ratio.toFixed(1) + '×' : 'N/A';
+    opt.textContent = `${c.cell_id}  [${c.scale}] ${wr} ${cr}  ratio=${ratio}`;
+    sel.appendChild(opt);
+  });
+}
+
+function _currentCellMeta() {
+  const cellId = document.getElementById('scenSelect').value;
+  return _cells.find(c => c.cell_id === cellId) || null;
+}
+
+function _updateOracleVisibility() {
+  const meta = _currentCellMeta();
+  const show = meta && meta.oracle_available;
+  document.getElementById('oracleSelectLabel').style.display = show ? '' : 'none';
+  document.getElementById('oracleSelect').style.display    = show ? '' : 'none';
+  if (!show) {
+    document.getElementById('oracleSelect').value = 'full_pool';
+  }
+  _updateWarmLabel();
+}
+
+function _updateWarmLabel() {
+  const oSel = document.getElementById('oracleSelect');
+  const arm = (oSel.style.display !== 'none') ? oSel.value : 'full_pool';
+  const labels = {
+    full_pool:      'Warm Agent',
+    classical_only: 'Oracle: Classical only',
+    quantum_only:   'Oracle: Quantum only (QAOA)',
+  };
+  const lbl = labels[arm] || 'Warm Agent';
+  document.getElementById('warmCardLabel').textContent = lbl;
+  document.getElementById('warmMetricsLabel').textContent = lbl;
+}
+
+function onScenarioChange() {
+  _reach = null;
+  resetAnim();
+  clearCanvases();
+  clearMetrics();
+  _updateOracleVisibility();
+  document.getElementById('btnPlay').disabled = true;
+  document.getElementById('btnReset').disabled = true;
+}
+
+function onOracleChange() {
+  _reach = null;
+  resetAnim();
+  clearCanvases();
+  clearMetrics();
+  _updateWarmLabel();
+  document.getElementById('btnPlay').disabled = true;
+  document.getElementById('btnReset').disabled = true;
+}
+
+function onPerturbChange() {
+  const v = parseFloat(document.getElementById('perturbSelect').value);
+  document.getElementById('reachOodNote').style.display = (v === 1.0) ? 'none' : 'block';
+  _reach = null;
+  resetAnim();
+  clearCanvases();
+  clearMetrics();
+  document.getElementById('btnPlay').disabled = true;
+  document.getElementById('btnReset').disabled = true;
+}
+
+/* ================================================================
+   Cells table
+   ================================================================ */
+function populateCellsTable() {
+  const tbody = document.getElementById('cellsTableBody');
+  tbody.innerHTML = '';
+  _cells.forEach((c, i) => {
+    const tr = document.createElement('tr');
+    const wReach = c.warm_reached
+      ? '<span class="bool-yes">Yes</span>'
+      : '<span class="bool-no">No</span>';
+    const cReach = c.cold_reached
+      ? '<span class="bool-yes">Yes</span>'
+      : '<span class="bool-no">No</span>';
+    tr.innerHTML = `
+      <td>${c.cell_id}</td>
+      <td>${c.scale}</td>
+      <td>${wReach}</td>
+      <td>${cReach}</td>
+      <td>${c.warm_ratio != null ? c.warm_ratio.toFixed(2) + '×' : '—'}</td>
+    `;
+    tr.addEventListener('click', () => {
+      document.getElementById('scenSelect').value = c.cell_id;
+      document.querySelectorAll('#cellsTableBody tr').forEach(r => r.classList.remove('selected'));
+      tr.classList.add('selected');
+      onScenarioChange();
+    });
+    tbody.appendChild(tr);
+  });
+}
+
+/* ================================================================
+   Run /reach
+   ================================================================ */
+async function runReach() {
+  const cellId = document.getElementById('scenSelect').value;
+  if (!cellId) return;
+
+  stopPlay();
+  clearCanvases();
+  clearMetrics();
+  hideError('reachError');
+  setLoading(true);
+
+  const perturb = parseFloat(document.getElementById('perturbSelect').value) || 1.0;
+  const oSel = document.getElementById('oracleSelect');
+  const oracleArm = (oSel.style.display !== 'none') ? oSel.value : 'full_pool';
+
+  // Use /oracle_reach for non-default oracle arms at training-level perturbation
+  const useOracle = (oracleArm !== 'full_pool') && (perturb === 1.0);
+
+  try {
+    let res;
+    if (useOracle) {
+      res = await fetch('/oracle_reach', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cell_id: cellId, oracle_arm: oracleArm })
+      });
+    } else {
+      res = await fetch('/reach', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cell_id: cellId, perturb_multiplier: perturb })
+      });
+    }
+    if (!res.ok) {
+      const t = await res.text();
+      throw new Error(`HTTP ${res.status}: ${t}`);
+    }
+    const text = await res.text();
+    const fixed = text.replace(/:\s*Infinity\b/g, ': null');
+    _reach = JSON.parse(fixed);
+  } catch(e) {
+    showError('reachError', 'Failed to load scenario: ' + e.message);
+    setLoading(false);
+    return;
+  }
+
+  setLoading(false);
+  buildTransform();
+  _maxStep = Math.max(
+    (_reach.warm.path || []).length - 1,
+    (_reach.cold.path || []).length - 1
+  );
+  _animStep = 0;
+
+  const slider = document.getElementById('stepSlider');
+  slider.max = _maxStep;
+  slider.value = 0;
+  slider.disabled = false;
+
+  document.getElementById('btnPlay').disabled = false;
+  document.getElementById('btnReset').disabled = false;
+
+  updateStepLabel();
+  renderAll();
+  renderMetrics();
+}
+
+/* ================================================================
+   Transform: fit all node coords into canvas
+   ================================================================ */
+function buildTransform() {
+  const nodes = _reach.grid.nodes;
+  if (!nodes || nodes.length === 0) { _transform = null; return; }
+
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  nodes.forEach(([x, y]) => {
+    if (x < minX) minX = x; if (x > maxX) maxX = x;
+    if (y < minY) minY = y; if (y > maxY) maxY = y;
+  });
+
+  const CANVAS_W = 480, CANVAS_H = 480;
+  const PAD = 30;
+  const rangeX = maxX - minX || 1;
+  const rangeY = maxY - minY || 1;
+  const scaleX = (CANVAS_W - 2 * PAD) / rangeX;
+  const scaleY = (CANVAS_H - 2 * PAD) / rangeY;
+  const scale  = Math.min(scaleX, scaleY);
+
+  const usedW = rangeX * scale;
+  const usedH = rangeY * scale;
+
+  _transform = {
+    scale,
+    offX: PAD + (CANVAS_W - 2 * PAD - usedW) / 2 - minX * scale,
+    offY: PAD + (CANVAS_H - 2 * PAD - usedH) / 2 - minY * scale,
+    radius: Math.max(2, Math.min(6, scale * 0.4))
+  };
+}
+
+function nodeXY(idx) {
+  const [x, y] = _reach.grid.nodes[idx];
+  return [
+    x * _transform.scale + _transform.offX,
+    y * _transform.scale + _transform.offY
+  ];
+}
+
+/* ================================================================
+   Render
+   ================================================================ */
+function renderAll() {
+  if (!_reach || !_transform) return;
+  renderCanvas('cvWarm', _reach.warm.path,  '#3fb950', false);
+  renderCanvas('cvCold', _reach.cold.path,  '#e07940', false);
+  renderCanvas('cvDijk', _reach.dijkstra.path, '#58a6ff', true);
+}
+
+function renderCanvas(canvasId, agentPath, pathColor, isDijkstra) {
+  const cv = document.getElementById(canvasId);
+  const ctx = cv.getContext('2d');
+  const W = cv._logW || cv.width, H = cv._logH || cv.height;
+
+  ctx.clearRect(0, 0, W, H);
+
+  const nodes  = _reach.grid.nodes;
+  const edges  = _reach.grid.edges;
+  const srcIdx = _reach.grid.src_idx;
+  const dstIdx = _reach.grid.dst_idx;
+  const r = _transform.radius;
+
+  // Edges
+  ctx.beginPath();
+  ctx.strokeStyle = '#2d3340';
+  ctx.lineWidth = 0.8;
+  edges.forEach(([u, v]) => {
+    if (nodes[u][2] < 0.5 || nodes[v][2] < 0.5) return;
+    const [ux, uy] = nodeXY(u);
+    const [vx, vy] = nodeXY(v);
+    ctx.moveTo(ux, uy);
+    ctx.lineTo(vx, vy);
+  });
+  ctx.stroke();
+
+  // Dijkstra reference path — faint dashed blue underlay on all canvases
+  const dijkPath = _reach.dijkstra.path || [];
+  if (dijkPath.length > 1) {
+    ctx.save();
+    ctx.setLineDash([5, 4]);
+    ctx.strokeStyle = 'rgba(88,166,255,0.35)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    const [dx0, dy0] = nodeXY(dijkPath[0]);
+    ctx.moveTo(dx0, dy0);
+    for (let i = 1; i < dijkPath.length; i++) {
+      const [dx, dy] = nodeXY(dijkPath[i]);
+      ctx.lineTo(dx, dy);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Agent path up to _animStep
+  if (agentPath && agentPath.length > 1) {
+    const limit = isDijkstra
+      ? agentPath.length
+      : Math.min(_animStep + 1, agentPath.length);
+    if (limit > 1) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.strokeStyle = pathColor;
+      ctx.lineWidth = 2.5;
+      ctx.setLineDash(isDijkstra ? [6, 4] : []);
+      const [px0, py0] = nodeXY(agentPath[0]);
+      ctx.moveTo(px0, py0);
+      for (let i = 1; i < limit; i++) {
+        const [px, py] = nodeXY(agentPath[i]);
+        ctx.lineTo(px, py);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  // Nodes
+  nodes.forEach(([x, y, active], idx) => {
+    const [px, py] = [x * _transform.scale + _transform.offX, y * _transform.scale + _transform.offY];
+    const isSrc = idx === srcIdx;
+    const isDst = idx === dstIdx;
+
+    if (isSrc) {
+      ctx.beginPath();
+      ctx.arc(px, py, r + 2, 0, Math.PI * 2);
+      ctx.fillStyle = '#3fb950';
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    } else if (isDst) {
+      ctx.beginPath();
+      ctx.arc(px, py, r + 2, 0, Math.PI * 2);
+      ctx.fillStyle = '#f85149';
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    } else if (active >= 0.5) {
+      ctx.beginPath();
+      ctx.arc(px, py, r, 0, Math.PI * 2);
+      ctx.fillStyle = '#c9d1d9';
+      ctx.fill();
+    } else {
+      ctx.beginPath();
+      ctx.arc(px, py, r * 0.6, 0, Math.PI * 2);
+      ctx.fillStyle = '#2d3340';
+      ctx.fill();
+    }
+  });
+
+  // Highlight current step node
+  if (!isDijkstra && agentPath && agentPath.length > 0 && _animStep < agentPath.length) {
+    const curIdx = agentPath[_animStep];
+    const [px, py] = nodeXY(curIdx);
+    ctx.beginPath();
+    ctx.arc(px, py, r + 3, 0, Math.PI * 2);
+    ctx.strokeStyle = pathColor;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+}
+
+/* ================================================================
+   Metrics
+   ================================================================ */
+function renderMetrics() {
+  if (!_reach) return;
+
+  const w = _reach.warm;
+  const c = _reach.cold;
+  const d = _reach.dijkstra;
+
+  const warmBadge = document.getElementById('warmBadge');
+  warmBadge.textContent = w.reached ? 'REACHED' : 'FAILED';
+  warmBadge.className = 'badge ' + (w.reached ? 'reached' : 'failed');
+
+  const coldBadge = document.getElementById('coldBadge');
+  coldBadge.textContent = c.reached ? 'REACHED' : 'FAILED';
+  coldBadge.className = 'badge ' + (c.reached ? 'reached' : 'failed');
+
+  document.getElementById('warmMetrics').innerHTML =
+    metricHtml(w.reached, w.steps, w.cost, w.cost_ratio_vs_dijkstra, w.mean_latency_ms);
+  document.getElementById('coldMetrics').innerHTML =
+    metricHtml(c.reached, c.steps, c.cost, c.cost_ratio_vs_dijkstra, c.mean_latency_ms);
+  document.getElementById('dijkMetrics').innerHTML = `
+    <span class="metric-item"><span class="metric-label">cost: </span><span class="metric-val">${d.cost != null ? d.cost.toFixed(2) : '∞'}</span></span>
+    <span class="metric-item"><span class="metric-label">path len: </span><span class="metric-val">${(d.path || []).length}</span></span>
+  `;
+}
+
+function metricHtml(reached, steps, cost, ratio, latency_ms) {
+  const okBad = reached ? 'ok' : 'bad';
+  const reachStr = reached ? '✓ reached' : '✗ failed';
+  const costStr  = (cost === Infinity || cost === null) ? '∞' : cost.toFixed(1);
+  const ratioStr = ratio != null ? ratio.toFixed(2) + '×' : 'N/A';
+  return `
+    <span class="metric-item"><span class="metric-val ${okBad}">${reachStr}</span></span>
+    <span class="metric-item"><span class="metric-label">steps=</span><span class="metric-val">${steps}</span></span>
+    <span class="metric-item"><span class="metric-label">cost=</span><span class="metric-val">${costStr}</span></span>
+    <span class="metric-item"><span class="metric-label">ratio=</span><span class="metric-val">${ratioStr}</span></span>
+    <span class="metric-item"><span class="metric-label">lat=</span><span class="metric-val">${latency_ms != null ? latency_ms.toFixed(2) + 'ms' : '—'}</span></span>
+  `;
+}
+
+function clearMetrics() {
+  document.getElementById('warmMetrics').innerHTML = '<span class="metric-label">—</span>';
+  document.getElementById('coldMetrics').innerHTML = '<span class="metric-label">—</span>';
+  document.getElementById('dijkMetrics').innerHTML = '<span class="metric-label">—</span>';
+  document.getElementById('warmBadge').textContent = 'WARM';
+  document.getElementById('warmBadge').className = 'badge reached';
+  document.getElementById('coldBadge').textContent = 'COLD';
+  document.getElementById('coldBadge').className = 'badge failed';
+  _updateWarmLabel();
+}
+
+function clearCanvases() {
+  ['cvWarm','cvCold','cvDijk'].forEach(id => {
+    const cv = document.getElementById(id);
+    const W = cv._logW || cv.width, H = cv._logH || cv.height;
+    cv.getContext('2d').clearRect(0, 0, W, H);
+  });
+}
+
+/* ================================================================
+   Animation controls
+   ================================================================ */
+function onSlider() {
+  _animStep = parseInt(document.getElementById('stepSlider').value, 10);
+  updateStepLabel();
+  renderAll();
+}
+
+function updateStepLabel() {
+  document.getElementById('stepLabel').textContent = `${_animStep} / ${_maxStep}`;
+}
+
+function togglePlay() {
+  if (_isPlaying) { stopPlay(); }
+  else             { startPlay(); }
+}
+
+function startPlay() {
+  if (!_reach) return;
+  _isPlaying = true;
+  document.getElementById('btnPlay').textContent = '⏸ Pause';
+  step();
+}
+
+function step() {
+  if (!_isPlaying) return;
+  if (_animStep >= _maxStep) {
+    stopPlay();
+    return;
+  }
+  _animStep++;
+  document.getElementById('stepSlider').value = _animStep;
+  updateStepLabel();
+  renderAll();
+  _playTimer = setTimeout(step, 200);
+}
+
+function stopPlay() {
+  _isPlaying = false;
+  clearTimeout(_playTimer);
+  document.getElementById('btnPlay').textContent = '▶ Play';
+}
+
+function resetAnim() {
+  stopPlay();
+  _animStep = 0;
+  const slider = document.getElementById('stepSlider');
+  slider.value = 0;
+  updateStepLabel();
+  if (_reach) renderAll();
+}
+
+/* ================================================================
+   SANDBOX TAB
+   ================================================================ */
+
+/* --- State --- */
+let _sbGrid        = null;    // data from GET /sandbox/grid
+let _sbBlocked     = new Set();
+let _sbSrc         = -1;
+let _sbDst         = -1;
+let _sbTrainSrc    = -1;      // training-pair src index for current scenario
+let _sbTrainDst    = -1;      // training-pair dst index for current scenario
+let _sbCellId      = '25x25_s1';
+let _sbMode        = 'block'; // 'source' | 'dest' | 'block'
+let _sbRaceResult  = null;
+let _sbAnimStep    = 0;
+let _sbAnimTimer   = null;
+let _sbLoaded      = false;
+let _sbXform       = null;    // { toX, toY }
+
+/* --- Lazy-load on first tab activation --- */
+function activateSandboxTab() {
+  if (!_sbLoaded) { _sbLoaded = true; loadSandboxScenarios(); }
+}
+
+async function loadSandboxScenarios() {
+  try {
+    const res = await fetch('/sandbox/scenarios');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const scenarios = await res.json();
+    const sel = document.getElementById('sbScenSelect');
+    sel.innerHTML = '';
+    scenarios.forEach(sc => {
+      const opt = document.createElement('option');
+      opt.value = sc.cell_id;
+      opt.textContent = `${sc.cell_id}  [${sc.scale}]`;
+      sel.appendChild(opt);
+    });
+    // Default to 25x25_s1 (the most dramatic warm-wins cell)
+    const prefer = scenarios.findIndex(s => s.cell_id === '25x25_s1');
+    if (prefer >= 0) sel.selectedIndex = prefer;
+    await loadSandboxGrid(sel.value);
+  } catch(e) {
+    document.getElementById('sbError').textContent = 'Failed to load sandbox scenarios: ' + e.message;
+    document.getElementById('sbError').style.display = 'block';
+  }
+}
+
+async function loadSandboxGrid(cellId) {
+  _sbCellId = cellId || '25x25_s1';
+  try {
+    const res = await fetch('/sandbox/grid?cell_id=' + encodeURIComponent(_sbCellId));
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    _sbGrid = await res.json();
+    _sbTrainSrc = _sbGrid.train_src_idx;
+    _sbTrainDst = _sbGrid.train_dst_idx;
+    _sbXform = buildSbTransform(_sbGrid.nodes, 580, 580);
+    const cv = document.getElementById('cvSandbox');
+    // Remove and re-add click listener to avoid stacking
+    cv.removeEventListener('click', onSbCanvasClick);
+    cv.addEventListener('click', onSbCanvasClick);
+    // Default to training pair
+    sbUseTrainingPair();
+    renderSandbox();
+  } catch(e) {
+    document.getElementById('sbError').textContent = 'Failed to load grid: ' + e.message;
+    document.getElementById('sbError').style.display = 'block';
+  }
+}
+
+async function onSbScenChange() {
+  const cellId = document.getElementById('sbScenSelect').value;
+  if (!cellId) return;
+  stopSandboxAnim();
+  _sbBlocked.clear();
+  _sbSrc = -1;
+  _sbDst = -1;
+  _sbRaceResult = null;
+  document.getElementById('sbResults').style.display = 'none';
+  document.getElementById('sbError').style.display = 'none';
+  await loadSandboxGrid(cellId);
+}
+
+/* --- Use the training pair for this scenario --- */
+function sbUseTrainingPair() {
+  if (_sbTrainSrc < 0 || _sbTrainDst < 0) return;
+  _sbSrc = _sbTrainSrc;
+  _sbDst = _sbTrainDst;
+  updateSandboxHint();
+  updateOodNote();
+  renderSandbox();
+}
+
+/* --- OOD warning: shown when src/dst differ from training pair --- */
+function updateOodNote() {
+  const isTrainingPair = (_sbSrc === _sbTrainSrc && _sbDst === _sbTrainDst);
+  document.getElementById('sbOodNote').style.display = isTrainingPair ? 'none' : 'block';
+}
+
+/* --- Coordinate transform --- */
+function buildSbTransform(nodes, logW, logH) {
+  const PAD = 24;
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const [x, y] of nodes) {
+    if (x < minX) minX = x; if (x > maxX) maxX = x;
+    if (y < minY) minY = y; if (y > maxY) maxY = y;
+  }
+  const rangeX = maxX - minX || 1;
+  const rangeY = maxY - minY || 1;
+  const scaleX = (logW - 2 * PAD) / rangeX;
+  const scaleY = (logH - 2 * PAD) / rangeY;
+  const sc = Math.min(scaleX, scaleY);
+  const offX = PAD + (logW - 2 * PAD - rangeX * sc) / 2;
+  const offY = PAD + (logH - 2 * PAD - rangeY * sc) / 2;
+  return {
+    toX: gx => offX + (gx - minX) * sc,
+    toY: gy => offY + (gy - minY) * sc
+  };
+}
+
+/* --- Nearest-node hit test --- */
+function sbNearestNode(cx, cy) {
+  if (!_sbGrid) return -1;
+  let bestIdx = -1, bestDist = Infinity;
+  for (let i = 0; i < _sbGrid.nodes.length; i++) {
+    const [gx, gy] = _sbGrid.nodes[i];
+    const px = _sbXform.toX(gx);
+    const py = _sbXform.toY(gy);
+    const d = Math.hypot(cx - px, cy - py);
+    if (d < bestDist) { bestDist = d; bestIdx = i; }
+  }
+  return bestDist < 20 ? bestIdx : -1;
+}
+
+/* --- Canvas click handler --- */
+function onSbCanvasClick(e) {
+  if (!_sbGrid) return;
+  const rect = this.getBoundingClientRect();
+  const cx = e.clientX - rect.left;
+  const cy = e.clientY - rect.top;
+  const idx = sbNearestNode(cx, cy);
+  if (idx < 0) return;
+  const [, , active] = _sbGrid.nodes[idx];
+  if (active < 0.5) return;
+
+  if (_sbMode === 'source') {
+    _sbSrc = idx;
+    if (_sbDst === idx) _sbDst = -1;
+  } else if (_sbMode === 'dest') {
+    _sbDst = idx;
+    if (_sbSrc === idx) _sbSrc = -1;
+  } else {
+    if (idx === _sbSrc || idx === _sbDst) return;
+    if (_sbBlocked.has(idx)) _sbBlocked.delete(idx);
+    else _sbBlocked.add(idx);
+  }
+  renderSandbox();
+  updateSandboxHint();
+  updateOodNote();
+}
+
+/* --- Mode buttons --- */
+function setSbMode(mode) {
+  _sbMode = mode;
+  ['source','dest','block'].forEach(m => {
+    const el = document.getElementById(
+      m === 'source' ? 'sbModeSource' : m === 'dest' ? 'sbModeDest' : 'sbModeBlock'
+    );
+    el.classList.toggle('active', m === mode);
+  });
+}
+
+/* --- Hint bar --- */
+function updateSandboxHint() {
+  const srcEl = document.getElementById('sbHintSrc');
+  const dstEl = document.getElementById('sbHintDst');
+  const obsEl = document.getElementById('sbHintObs');
+  if (_sbSrc >= 0) {
+    srcEl.textContent = 'source: node ' + _sbSrc + (_sbSrc === _sbTrainSrc ? ' (train)' : '');
+    srcEl.className = 'set';
+  } else {
+    srcEl.textContent = 'source: not set';
+    srcEl.className = 'notset';
+  }
+  if (_sbDst >= 0) {
+    dstEl.textContent = 'dest: node ' + _sbDst + (_sbDst === _sbTrainDst ? ' (train)' : '');
+    dstEl.className = 'set';
+  } else {
+    dstEl.textContent = 'dest: not set';
+    dstEl.className = 'notset';
+  }
+  obsEl.textContent = 'obstacles: ' + _sbBlocked.size;
+  document.getElementById('btnRace').disabled = (_sbSrc < 0 || _sbDst < 0);
+}
+
+/* --- Clear / Reset --- */
+function sbClearObstacles() {
+  _sbBlocked.clear();
+  renderSandbox();
+  updateSandboxHint();
+}
+
+function sbResetAll() {
+  stopSandboxAnim();
+  _sbBlocked.clear();
+  _sbRaceResult = null;
+  document.getElementById('sbResults').style.display = 'none';
+  sbUseTrainingPair();  // reset src/dst to training pair, not to -1
+  renderSandbox();
+}
+
+/* --- Race! --- */
+async function runSandboxRace() {
+  document.getElementById('btnRace').disabled = true;
+  if (_sbSrc < 0 || _sbDst < 0) return;
+  stopSandboxAnim();
+  _sbRaceResult = null;
+  document.getElementById('sbError').style.display = 'none';
+  document.getElementById('sbRaceLoading').style.display = 'inline';
+  document.getElementById('sbResults').style.display = 'none';
+
+  try {
+    const body = {
+      blocked: [..._sbBlocked],
+      src_idx: _sbSrc,
+      dst_idx: _sbDst,
+      cell_id: _sbCellId,
+    };
+    const res = await fetch('/sandbox', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const text = await res.text();
+    const fixed = text.replace(/:\s*Infinity\b/g, ': null');
+    _sbRaceResult = JSON.parse(fixed);
+
+    // Refresh transform from returned grid
+    _sbGrid = _sbRaceResult.grid;
+    _sbXform = buildSbTransform(_sbGrid.nodes, 580, 580);
+
+    _sbAnimStep = 0;
+    renderSandboxResults();
+    startSandboxAnim();
+  } catch(e) {
+    document.getElementById('sbError').textContent = 'Race failed: ' + e.message;
+    document.getElementById('sbError').style.display = 'block';
+  } finally {
+    document.getElementById('sbRaceLoading').style.display = 'none';
+    document.getElementById('btnRace').disabled = (_sbSrc < 0 || _sbDst < 0);
+  }
+}
+
+/* --- Animation --- */
+function startSandboxAnim() {
+  if (!_sbRaceResult) return;
+  const maxSteps = Math.max(
+    (_sbRaceResult.warm.path || []).length,
+    (_sbRaceResult.cold.path || []).length
+  );
+  renderSandbox();
+  _sbAnimTimer = setInterval(() => {
+    _sbAnimStep++;
+    renderSandbox();
+    if (_sbAnimStep >= maxSteps) {
+      clearInterval(_sbAnimTimer);
+      _sbAnimTimer = null;
+    }
+  }, 120);
+}
+
+function stopSandboxAnim() {
+  if (_sbAnimTimer) { clearInterval(_sbAnimTimer); _sbAnimTimer = null; }
+}
+
+/* --- Results panel --- */
+function renderSandboxResults() {
+  if (!_sbRaceResult) return;
+  const w = _sbRaceResult.warm;
+  const c = _sbRaceResult.cold;
+  const d = _sbRaceResult.dijkstra;
+
+  function fmtCost(v) {
+    return (v === null || v === undefined) ? '∞' : v.toFixed(1);
+  }
+  function fmtRatio(v) {
+    return (v === null || v === undefined) ? 'N/A' : v.toFixed(2) + '×';
+  }
+
+  const warmIcon = w.reached ? '✓ reached' : '✗ failed';
+  const coldIcon = c.reached ? '✓ reached' : '✗ failed';
+
+  document.getElementById('srWarmRow').innerHTML =
+    `<span class="sr-warm">Warm:</span> ${warmIcon}  steps=${w.steps}  cost=${fmtCost(w.cost)}  ratio=${fmtRatio(w.cost_ratio_vs_dijkstra)}`;
+  document.getElementById('srColdRow').innerHTML =
+    `<span class="sr-cold">Cold:</span> ${coldIcon}  steps=${c.steps}  cost=${fmtCost(c.cost)}  ratio=${fmtRatio(c.cost_ratio_vs_dijkstra)}`;
+  document.getElementById('srDijkRow').innerHTML =
+    `<span class="sr-dijk">Dijkstra:</span> cost=${d.cost != null ? d.cost.toFixed(1) : '∞'}  path-len=${(d.path || []).length}`;
+  document.getElementById('srLatRow').innerHTML =
+    `Inference: warm ${w.mean_latency_ms != null ? w.mean_latency_ms.toFixed(2) : '—'}ms/step | cold ${c.mean_latency_ms != null ? c.mean_latency_ms.toFixed(2) : '—'}ms/step`;
+
+  document.getElementById('sbResults').style.display = 'block';
+}
+
+/* --- Render canvas --- */
+function renderSandbox() {
+  const cv = document.getElementById('cvSandbox');
+  const ctx = cv.getContext('2d');
+  const W = cv._logW || 580;
+  const H = cv._logH || 580;
+  ctx.clearRect(0, 0, W, H);
+
+  if (!_sbGrid || !_sbXform) return;
+
+  const nodes = _sbGrid.nodes;
+  const edges = _sbGrid.edges;
+
+  // Edges
+  ctx.beginPath();
+  ctx.strokeStyle = '#2d3340';
+  ctx.lineWidth = 0.8;
+  edges.forEach(([u, v]) => {
+    if (nodes[u][2] < 0.5 || nodes[v][2] < 0.5) return;
+    if (_sbBlocked.has(u) || _sbBlocked.has(v)) return;
+    const ux = _sbXform.toX(nodes[u][0]), uy = _sbXform.toY(nodes[u][1]);
+    const vx = _sbXform.toX(nodes[v][0]), vy = _sbXform.toY(nodes[v][1]);
+    ctx.moveTo(ux, uy);
+    ctx.lineTo(vx, vy);
+  });
+  ctx.stroke();
+
+  // Race trails if result exists
+  if (_sbRaceResult) {
+    const warmPath = _sbRaceResult.warm.path || [];
+    const coldPath = _sbRaceResult.cold.path || [];
+
+    // Warm trail
+    const warmLimit = Math.min(_sbAnimStep + 1, warmPath.length);
+    if (warmLimit > 1) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(63,185,80,0.55)';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      const [wx0, wy0] = [_sbXform.toX(nodes[warmPath[0]][0]), _sbXform.toY(nodes[warmPath[0]][1])];
+      ctx.moveTo(wx0, wy0);
+      for (let i = 1; i < warmLimit; i++) {
+        ctx.lineTo(_sbXform.toX(nodes[warmPath[i]][0]), _sbXform.toY(nodes[warmPath[i]][1]));
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Cold trail
+    const coldLimit = Math.min(_sbAnimStep + 1, coldPath.length);
+    if (coldLimit > 1) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(224,121,64,0.55)';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      const [cx0, cy0] = [_sbXform.toX(nodes[coldPath[0]][0]), _sbXform.toY(nodes[coldPath[0]][1])];
+      ctx.moveTo(cx0, cy0);
+      for (let i = 1; i < coldLimit; i++) {
+        ctx.lineTo(_sbXform.toX(nodes[coldPath[i]][0]), _sbXform.toY(nodes[coldPath[i]][1]));
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  // Nodes
+  nodes.forEach(([gx, gy, active], idx) => {
+    const px = _sbXform.toX(gx);
+    const py = _sbXform.toY(gy);
+    const isBlocked = _sbBlocked.has(idx);
+    const isSrc = idx === _sbSrc;
+    const isDst = idx === _sbDst;
+
+    if (isSrc) {
+      ctx.beginPath();
+      ctx.arc(px, py, 8, 0, Math.PI * 2);
+      ctx.fillStyle = '#3fb950';
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    } else if (isDst) {
+      ctx.beginPath();
+      ctx.arc(px, py, 8, 0, Math.PI * 2);
+      ctx.fillStyle = '#f85149';
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    } else if (isBlocked) {
+      ctx.beginPath();
+      ctx.arc(px, py, 6, 0, Math.PI * 2);
+      ctx.fillStyle = '#6e1f1a';
+      ctx.fill();
+      ctx.strokeStyle = '#f85149';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      // Draw ×
+      ctx.save();
+      ctx.strokeStyle = '#f85149';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(px - 4, py - 4); ctx.lineTo(px + 4, py + 4);
+      ctx.moveTo(px + 4, py - 4); ctx.lineTo(px - 4, py + 4);
+      ctx.stroke();
+      ctx.restore();
+    } else if (active < 0.5) {
+      ctx.beginPath();
+      ctx.arc(px, py, 3, 0, Math.PI * 2);
+      ctx.fillStyle = '#2d3340';
+      ctx.fill();
+    } else {
+      ctx.beginPath();
+      ctx.arc(px, py, 5, 0, Math.PI * 2);
+      ctx.fillStyle = '#4a5568';
+      ctx.fill();
+    }
+  });
+
+  // Current-position dots on top
+  if (_sbRaceResult) {
+    const warmPath = _sbRaceResult.warm.path || [];
+    const coldPath = _sbRaceResult.cold.path || [];
+
+    if (warmPath.length > 0) {
+      const wi = Math.min(_sbAnimStep, warmPath.length - 1);
+      const wpx = _sbXform.toX(nodes[warmPath[wi]][0]);
+      const wpy = _sbXform.toY(nodes[warmPath[wi]][1]);
+      ctx.beginPath();
+      ctx.arc(wpx, wpy, 7, 0, Math.PI * 2);
+      ctx.fillStyle = '#3fb950';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+
+    if (coldPath.length > 0) {
+      const ci = Math.min(_sbAnimStep, coldPath.length - 1);
+      const cpx = _sbXform.toX(nodes[coldPath[ci]][0]);
+      const cpy = _sbXform.toY(nodes[coldPath[ci]][1]);
+      ctx.beginPath();
+      ctx.arc(cpx, cpy, 7, 0, Math.PI * 2);
+      ctx.fillStyle = '#e07940';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+
+    // Winner overlay text
+    const maxSteps = Math.max(warmPath.length, coldPath.length);
+    if (_sbAnimStep >= maxSteps - 1 && maxSteps > 0) {
+      const warmReached = _sbRaceResult.warm.reached;
+      const coldReached = _sbRaceResult.cold.reached;
+      let overlayText = '';
+      let overlayColor = '';
+      if (warmReached && coldReached) {
+        overlayText = 'BOTH REACHED!';
+        overlayColor = '#3fb950';
+      } else if (warmReached) {
+        overlayText = 'WARM WINS!';
+        overlayColor = '#3fb950';
+      } else if (coldReached) {
+        overlayText = 'COLD WINS!';
+        overlayColor = '#e07940';
+      } else {
+        overlayText = 'BOTH STUCK';
+        overlayColor = '#8b949e';
+      }
+      ctx.save();
+      ctx.font = 'bold 26px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillStyle = 'rgba(13,17,23,0.88)';
+      const textW = ctx.measureText(overlayText).width;
+      ctx.fillRect(W - textW - 20, 10, textW + 14, 40);
+      ctx.fillStyle = overlayColor;
+      ctx.fillText(overlayText, W - 10, 37);
+      ctx.restore();
+    }
+  }
+}
+
+/* ================================================================
+   Helpers
+   ================================================================ */
+function showError(id, msg) {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+function hideError(id) {
+  document.getElementById(id).style.display = 'none';
+}
+function setLoading(v) {
+  document.getElementById('loadingIndicator').style.display = v ? 'inline' : 'none';
+  document.getElementById('btnRun').disabled = v;
+}
+</script>
+</body>
+</html>

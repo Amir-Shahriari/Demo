@@ -1,0 +1,53 @@
+# Virtual environments
+.venv/
+.test_venv/
+/venv/
+/env/
+
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Test / coverage artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Editors and OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# Claude Code (never commit)
+CLAUDE.md
+.claude/
+
+# Logs
+*.log
+
+# Runs, sweeps, and bulk data (all excluded — only demo_agents/ checkpoints are committed)
+runs/
+runs_rerun/
+benchmarks/
+
+# Report and prompt markdown
+FINDINGS.md
+MAIN_BUILD_PROMPT_V2.md
+docs/
+report/
+
+# Sandbox / retrained variants
+*_sandbox_*.pt
+backup_*/
+backup_noqaoa/
+
+# Build and misc
+dist/
+build/
+*.egg-info/
+graphify-out/
