@@ -69,3 +69,6 @@ demo_app/        FastAPI server + single-page HTML UI
 src/qwarm/       Minimal runtime package (GNN-DQN model, graph env, utilities)
 demo_agents/     Pre-trained checkpoints (warm, cold, oracle arms) + manifest.json
 ```
+
+
+<img width="1401" height="1029" alt="demo_screenshot" src="https://github.com/user-attachments/assets/0c452f05-5a28-4d49-889e-531d36f494dd" />
