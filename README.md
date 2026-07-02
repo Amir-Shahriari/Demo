@@ -1,6 +1,6 @@
 # GNN-DQN Warm-Start Pathfinding Demo
 
-Live demo for the ICDM 2026 paper **"Quantum-Inspired Warm-Start GNN-RL for Dynamic Graph Routing"**.
+Live demo for **"Quantum-Inspired Warm-Start GNN-RL for Dynamic Graph Routing"**.
 Two GraphSAGE-DQN agents race on the same perturbed graph: one warm-started from a multi-scenario
 oracle replay buffer, one trained from scratch on that single graph (cold start). At 25×25 you can
 also compare three oracle training sources: full pool, classical-only, and quantum-only.
